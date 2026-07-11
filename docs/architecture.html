@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>oci-costing — architecture</title>
+<style>
+  :root {
+    --ivory:  #FAF9F5;
+    --paper:  #FFFFFF;
+    --slate:  #141413;
+    --clay:   #D97757;
+    --clay-d: #B85C3E;
+    --oat:    #E3DACC;
+    --olive:  #788C5D;
+    --g100:   #F0EEE6;
+    --g200:   #E6E3DA;
+    --g300:   #D1CFC5;
+    --g500:   #87867F;
+    --g700:   #3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", Times, serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--ivory);
+    color: var(--slate);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px 100px; }
+
+  /* ─── Sidebar TOC (desktop, sticky-in-grid) ─── */
+  .toc-side {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    width: 224px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    background: var(--paper);
+    border: 1.5px solid var(--g300);
+    border-radius: 12px;
+    padding: 16px 18px;
+    font-size: 13px;
+  }
+  .toc-side h6 {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--g500);
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+  .toc-side ul { list-style: none; padding: 0; margin: 0; }
+  .toc-side li { margin: 2px 0; }
+  .toc-side a {
+    display: block;
+    color: var(--g700);
+    text-decoration: none;
+    padding: 5px 10px;
+    border-left: 2px solid transparent;
+    font-size: 13px;
+    transition: color 120ms, border-color 120ms, background 120ms;
+  }
+  .toc-side a:hover { color: var(--slate); background: var(--g100); }
+  .toc-side a.active { color: var(--clay); border-left-color: var(--clay); font-weight: 500; }
+  .toc-side .sub a { padding-left: 22px; font-size: 12.5px; color: var(--g500); }
+  .toc-side .sub a.active { color: var(--clay); }
+  .toc-side .group {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--g500);
+    padding: 10px 10px 4px;
+  }
+
+  /* Body becomes a grid on wide screens — content on left, sticky sidebar on right */
+  @media (min-width: 1100px) {
+    body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 248px;
+      gap: 40px;
+      max-width: 1640px;
+      margin: 0 auto;
+      padding: 0 40px;
+    }
+    .wrap     { grid-column: 1; max-width: none; margin: 0; padding: 0 0 100px; }
+    .toc-side { grid-column: 2; grid-row: 1; }
+    nav.toc-inline { display: none; }
+  }
+  @media (max-width: 1099px) {
+    .toc-side { display: none; }
+  }
+
+  header.masthead { padding: 48px 0 32px; border-bottom: 1.5px solid var(--g300); margin-bottom: 8px; }
+  .eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--g500); margin-bottom: 10px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 42px; letter-spacing: -0.02em; margin: 0 0 14px; line-height: 1.08; }
+  h1 em { color: var(--clay); font-style: italic; }
+  .intro { font-size: 15.5px; color: var(--g700); max-width: 820px; margin: 0 0 18px; }
+  .intro code { font-family: var(--mono); font-size: 13.5px; background: var(--g100); padding: 2px 6px; border-radius: 4px; }
+
+  nav.toc { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 0 0; }
+  nav.toc a { font-size: 12px; padding: 6px 12px; border: 1.5px solid var(--g300); border-radius: 999px; text-decoration: none; color: var(--g700); background: var(--paper); transition: border-color 120ms, color 120ms; display: inline-flex; align-items: center; gap: 7px; }
+  nav.toc a .n { font-family: var(--mono); font-size: 10px; color: var(--g500); }
+  nav.toc a:hover { border-color: var(--slate); color: var(--slate); }
+  nav.toc a:hover .n { color: var(--clay); }
+
+  section { margin-top: 44px; scroll-margin-top: 24px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .sec-head .idx { font-family: var(--mono); font-size: 12.5px; color: var(--clay); font-weight: 600; width: 28px; flex-shrink: 0; }
+  .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 23px; margin: 0; letter-spacing: -0.012em; }
+  .sec-head .count { font-family: var(--mono); font-size: 10.5px; color: var(--g500); background: var(--g100); padding: 2px 8px; border-radius: 999px; }
+  .sec-intro { font-size: 14px; color: var(--g700); max-width: 880px; margin: 0 0 16px 42px; }
+  .sec-body { margin-left: 42px; }
+  @media (max-width: 640px) { .sec-intro, .sec-body { margin-left: 0; } }
+
+  .flow-card { background: var(--paper); border: 1.5px solid var(--g300); border-radius: 12px; overflow: hidden; }
+  .flow-card .flow-frame {
+    height: 640px;
+    background: radial-gradient(circle, var(--g200) 1px, transparent 1px) 0 0 / 22px 22px, var(--ivory);
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 14px 18px; border-top: 1.5px solid var(--g200); background: var(--g100); font-family: var(--mono); font-size: 11px; color: var(--g700); }
+  .legend .sw { display: inline-flex; align-items: center; gap: 7px; }
+  .legend .dot { width: 11px; height: 11px; border-radius: 3px; border: 1.5px solid var(--slate); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .card { background: var(--paper); border: 1.5px solid var(--g300); border-radius: 12px; padding: 14px 16px; transition: border-color 150ms, box-shadow 150ms, transform 150ms; }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(20,20,19,0.08); border-color: var(--slate); }
+  .card .kicker { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--clay); margin-bottom: 6px; }
+  .card h3 { font-family: var(--serif); font-weight: 500; font-size: 17px; margin: 0 0 6px; line-height: 1.2; }
+  .card p { font-size: 13px; color: var(--g700); margin: 0; line-height: 1.45; }
+  .card code { font-family: var(--mono); font-size: 11.5px; background: var(--g100); padding: 1px 5px; border-radius: 3px; }
+
+  table.spec { width: 100%; border-collapse: collapse; background: var(--paper); border: 1.5px solid var(--g300); border-radius: 12px; overflow: hidden; font-size: 13px; }
+  table.spec th, table.spec td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--g200); vertical-align: top; }
+  table.spec thead th { background: var(--g100); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--g700); font-weight: 600; }
+  table.spec tr:last-child td { border-bottom: none; }
+  table.spec tr:hover td { background: var(--ivory); }
+  table.spec td code, table.spec th code { font-family: var(--mono); font-size: 11.5px; background: var(--g100); padding: 1px 5px; border-radius: 3px; }
+  table.spec td .pill { display: inline-block; font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 999px; border: 1.5px solid var(--g300); background: var(--ivory); color: var(--g700); white-space: nowrap; }
+  table.spec td .pill.pk { border-color: var(--clay); color: var(--clay-d); background: #fff4ed; }
+  table.spec td .pill.idx { border-color: var(--olive); color: var(--olive); background: #f1f4e9; }
+
+  ol.tiers { list-style: none; padding: 0; margin: 0; counter-reset: tier; display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 10px; }
+  ol.tiers li { counter-increment: tier; padding: 12px 14px 12px 48px; background: var(--paper); border: 1.5px solid var(--g300); border-radius: 10px; position: relative; margin: 0; }
+  ol.tiers li::before { content: counter(tier); position: absolute; left: 12px; top: 12px; width: 24px; height: 24px; border-radius: 50%; background: var(--clay); color: var(--paper); font-family: var(--mono); font-size: 11.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  ol.tiers li strong { font-family: var(--serif); font-weight: 500; font-size: 15px; display: block; margin-bottom: 3px; }
+  ol.tiers li span.body { color: var(--g700); font-size: 13px; line-height: 1.45; }
+  ol.tiers li code { font-family: var(--mono); font-size: 11.5px; background: var(--g100); padding: 1px 5px; border-radius: 3px; }
+
+  footer { margin-top: 100px; border-top: 1.5px solid var(--g300); padding-top: 36px; display: flex; justify-content: space-between; align-items: baseline; gap: 20px; flex-wrap: wrap; font-size: 13px; color: var(--g500); }
+  footer .k { font-family: var(--serif); font-style: italic; color: var(--g700); font-size: 15px; }
+  footer code { font-family: var(--mono); }
+</style>
+</head>
+<body>
+
+<!-- ============================== Sidebar TOC ============================== -->
+<aside class="toc-side" aria-label="Table of contents">
+  <h6>Contents</h6>
+  <ul>
+    <li><a href="#top">Overview</a></li>
+    <li><a href="#what">What</a></li>
+    <li><a href="#why">Why</a></li>
+    <li class="group">How</li>
+    <li class="sub"><a href="#flow">Flow diagram</a></li>
+    <li class="sub"><a href="#steps">Step by step</a></li>
+    <li><a href="#decisions">Design decisions</a></li>
+    <li><a href="#hardening">Recent hardening</a></li>
+  </ul>
+</aside>
+
+<div class="wrap">
+
+  <!-- ============================== Masthead ============================== -->
+  <header class="masthead" id="top">
+    <div class="eyebrow">OCI cost pipeline · Go · OKE · PostgreSQL</div>
+    <h1>OCI spend in <em>SQL you can join</em></h1>
+    <p class="intro">
+      <code>oci-costing</code> pulls FOCUS and OCI-proprietary cost report CSVs from the tenancy reporting bucket
+      every hour, normalizes them, and loads them into a partitioned PostgreSQL warehouse. Two static Go binaries
+      in a <code>FROM scratch</code> image, deployed as a Kubernetes CronJob on OKE.
+    </p>
+    <nav class="toc toc-inline">
+      <a href="#what">What <span class="n">01</span></a>
+      <a href="#why">Why <span class="n">02</span></a>
+      <a href="#flow">How — flow <span class="n">03</span></a>
+      <a href="#steps">How — steps <span class="n">04</span></a>
+      <a href="#decisions">Design decisions <span class="n">05</span></a>
+      <a href="#hardening">Recent hardening <span class="n">06</span></a>
+    </nav>
+  </header>
+
+  <!-- ============================== 01 What ============================== -->
+  <section id="what">
+    <div class="sec-head"><span class="idx">01</span><h2>What it is</h2><span class="count">4 cards</span></div>
+    <p class="sec-intro">
+      A two-binary system that turns OCI cost CSVs into queryable Postgres rows. One binary loads, one binary orchestrates;
+      both ship together in a single scratch image.
+    </p>
+    <div class="sec-body">
+      <div class="grid">
+        <div class="card">
+          <div class="kicker">Binary · loader</div>
+          <h3>oci-costing</h3>
+          <p>
+            Subcommands <code>focus</code> and <code>oci</code>. Reads <code>.csv.gz</code> files (single or folder), streams via gzip,
+            writes to Postgres in 10k-row <code>COPY</code> batches inside a per-file transaction.
+          </p>
+        </div>
+        <div class="card">
+          <div class="kicker">Binary · orchestrator</div>
+          <h3>oci-load</h3>
+          <p>
+            Container entrypoint. Calls <code>internal/ocireports</code> in-process to pull CSVs from OCI Object Storage,
+            then execs <code>oci-costing</code> twice (focus + oci).
+          </p>
+        </div>
+        <div class="card">
+          <div class="kicker">Report formats</div>
+          <h3>FOCUS + proprietary</h3>
+          <p>
+            <code>focus_data_table</code> for the vendor-neutral <em>FinOps Open Cost &amp; Usage</em> schema;
+            <code>oci_cost_report</code> for OCI's richer proprietary export with full <code>tags/*</code> in JSONB.
+          </p>
+        </div>
+        <div class="card">
+          <div class="kicker">Runtime</div>
+          <h3>Scratch on OKE</h3>
+          <p>
+            Hourly <code>CronJob</code> on OCI Kubernetes Engine. Image is <code>FROM scratch</code>
+            (~18&nbsp;MB, two static binaries, no shell), runs as UID 1000 with read-only rootfs.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== 02 Why ============================== -->
+  <section id="why">
+    <div class="sec-head"><span class="idx">02</span><h2>Why it exists</h2><span class="count">4 drivers</span></div>
+    <p class="sec-intro">
+      OCI's console exposes cost data as CSV exports in a tenancy bucket. The FinOps team needs that data in SQL,
+      freshly, with allocation tags intact, and without manual download steps.
+    </p>
+    <div class="sec-body">
+      <div class="grid">
+        <div class="card">
+          <div class="kicker">Driver</div>
+          <h3>Chargeback in SQL</h3>
+          <p>
+            Dashboards and chargeback queries can't pivot off CSV files. Granular line-item rows have to land in
+            a warehouse with stable schemas so allocation logic is reproducible.
+          </p>
+        </div>
+        <div class="card">
+          <div class="kicker">Driver</div>
+          <h3>Multi-cloud comparability</h3>
+          <p>
+            FOCUS is the cross-vendor standard; loading it side-by-side with the OCI proprietary schema lets
+            finance compare OCI spend against AWS/Azure on identical columns.
+          </p>
+        </div>
+        <div class="card">
+          <div class="kicker">Driver</div>
+          <h3>Catches corrections fast</h3>
+          <p>
+            OCI rewrites cost rows intra-day (<code>lineItem/isCorrection</code>). Hourly cadence means corrected
+            rows show up within an hour, not the next morning.
+          </p>
+        </div>
+        <div class="card">
+          <div class="kicker">Driver</div>
+          <h3>Safe to re-run</h3>
+          <p>
+            Files dedupe on <code>source_filename</code>; an already-loaded file is a no-op. Re-running the job after
+            a partial failure is the safest path forward, not the riskiest.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== 03 How — flow ============================== -->
+  <section id="flow">
+    <div class="sec-head"><span class="idx">03</span><h2>How — end-to-end flow</h2><span class="count">xyflow</span></div>
+    <p class="sec-intro">
+      Solid arrows are the primary data path. Dashed arrows are config inputs and downstream consumers. Drag any node
+      to reposition; scroll the page normally — the canvas does not hijack scroll.
+    </p>
+    <div class="sec-body">
+      <div class="flow-card">
+        <div id="flow-mount" class="flow-frame"></div>
+        <div class="legend">
+          <span class="sw"><span class="dot" style="background: var(--g100); border-color: var(--g500)"></span> source / config</span>
+          <span class="sw"><span class="dot" style="background: var(--paper)"></span> component</span>
+          <span class="sw"><span class="dot" style="background: var(--clay); border-color: var(--clay-d)"></span> orchestrator</span>
+          <span class="sw"><span class="dot" style="background: var(--g100); border-color: var(--olive)"></span> Postgres / sink</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== 04 How — steps ============================== -->
+  <section id="steps">
+    <div class="sec-head"><span class="idx">04</span><h2>How — step by step</h2><span class="count">9 tiers</span></div>
+    <p class="sec-intro">
+      What happens between a CronJob tick and rows hitting Postgres. Read top-to-bottom; the numbers map to logical
+      stages, not necessarily file boundaries.
+    </p>
+    <div class="sec-body">
+      <ol class="tiers">
+        <li>
+          <strong>Cron tick</strong>
+          <span class="body">
+            K8s fires the <code>CronJob</code> on schedule <code>0 * * * *</code>. The controller spawns a Job; the Job
+            starts a single Pod with <code>concurrencyPolicy: Forbid</code> so two ticks never overlap.
+          </span>
+        </li>
+        <li>
+          <strong>Orchestrator start</strong>
+          <span class="body">
+            Pod entrypoint is <code>/oci-load</code>. With no arguments it computes <em>yesterday</em> and
+            <em>today</em> in UTC; with one argument it accepts <code>yyyy</code>, <code>yyyy-mm</code>, or <code>yyyy-mm-dd</code> for backfill.
+          </span>
+        </li>
+        <li>
+          <strong>List + filter</strong>
+          <span class="body">
+            For each (date × {focus, cost}) <code>ocireports.Download</code> calls <code>ListObjects</code> on bucket
+            <code>bling</code> with prefix <code>FOCUS&nbsp;Reports/</code> or <code>reports/cost-csv/</code>, then keeps
+            only objects whose <code>TimeCreated</code> matches the requested interval.
+          </span>
+        </li>
+        <li>
+          <strong>Stream download</strong>
+          <span class="body">
+            Each match becomes a <code>GetObject</code> stream written to <code>/data/focus/</code> or <code>/data/cost/</code>
+            on the pod's <code>emptyDir</code>. Output paths are validated to stay inside the target dir — no
+            <code>../</code> escapes from malicious object names.
+          </span>
+        </li>
+        <li>
+          <strong>FOCUS load</strong>
+          <span class="body">
+            <code>oci-load</code> execs <code>/oci-costing focus /data/focus</code>. The loader reads <code>tags.yaml</code>
+            as an allow-list, opens each gzipped CSV, merges allowed <code>tags/*</code> into the JSONB <code>tags</code>
+            column, and <code>COPY</code>s into <code>focus_data_table</code> in 10k-row batches.
+          </span>
+        </li>
+        <li>
+          <strong>OCI proprietary load</strong>
+          <span class="body">
+            <code>oci-load</code> execs <code>/oci-costing oci /data/cost</code>. Same loader pattern but with
+            auto-detection — every <code>tags/*</code> column lands in the JSONB <code>tags</code> on
+            <code>oci_cost_report</code>, no allow-list.
+          </span>
+        </li>
+        <li>
+          <strong>Dedupe + idempotence</strong>
+          <span class="body">
+            Before loading, each file is checked with
+            <code>SELECT EXISTS(SELECT 1 FROM &lt;table&gt; WHERE source_filename = $1)</code>. Already-loaded files are
+            skipped and archived — re-running the job is always safe.
+          </span>
+        </li>
+        <li>
+          <strong>Safety nets</strong>
+          <span class="body">
+            Each file runs inside its own transaction (<code>BEGIN…COMMIT</code>) and its own 30-minute context.
+            A bad file marks <code>FAIL</code> and the batch continues; the process exits <code>2</code> if any
+            failed, so k8s reports the Job as failed without losing the partial work.
+          </span>
+        </li>
+        <li>
+          <strong>Pod exit</strong>
+          <span class="body">
+            Successfully loaded files move to <code>/data/&lt;type&gt;/archive/</code>; on Pod exit the entire
+            <code>emptyDir</code> is wiped. Only Postgres state survives — the next tick repeats with a clean slate.
+          </span>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============================== 05 Design decisions ============================== -->
+  <section id="decisions">
+    <div class="sec-head"><span class="idx">05</span><h2>Design decisions</h2><span class="count">7 choices</span></div>
+    <p class="sec-intro">
+      Each row is a decision that pushed back on a default. Tradeoffs are listed honestly; none of these is free.
+    </p>
+    <div class="sec-body">
+      <table class="spec">
+        <thead>
+          <tr><th>Decision</th><th>Choice</th><th>Why</th><th>Tradeoff</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>runtime image</code></td>
+            <td><span class="pill pk">FROM scratch</span></td>
+            <td>Smallest attack surface; no shell, no libc, ~18&nbsp;MB total.</td>
+            <td>No <code>kubectl exec</code> debugging in prod — must rely on logs.</td>
+          </tr>
+          <tr>
+            <td><code>orchestration</code></td>
+            <td><span class="pill">Go binary</span></td>
+            <td>Replaces <code>daily_load.sh</code> so scratch is viable (no <code>bash</code>/<code>date</code>/<code>tee</code> needed).</td>
+            <td>Bash script kept for local dev — two paths to maintain.</td>
+          </tr>
+          <tr>
+            <td><code>reports download</code></td>
+            <td><span class="pill">in-process Go pkg</span></td>
+            <td>One binary fewer in the image; no environment-variable indirection on the exec path.</td>
+            <td>Pulls in <code>oci-go-sdk/v65</code> as a dep.</td>
+          </tr>
+          <tr>
+            <td><code>tag handling</code></td>
+            <td><span class="pill idx">split</span></td>
+            <td>FOCUS uses an allow-list (<code>tags.yaml</code>); OCI proprietary auto-detects every <code>tags/*</code>. FOCUS exports hundreds of free-form tags; OCI's set is curated.</td>
+            <td>If OCI's tag set ever grows noisy, JSONB will bloat the GIN index.</td>
+          </tr>
+          <tr>
+            <td><code>txn scope</code></td>
+            <td><span class="pill">per file</span></td>
+            <td>All-or-nothing per CSV — recovery is "rerun the job", never "fix half-loaded rows".</td>
+            <td>Long files hold locks longer than per-batch commits would.</td>
+          </tr>
+          <tr>
+            <td><code>schedule</code></td>
+            <td><span class="pill">hourly</span></td>
+            <td>Picks up intra-day cost-report corrections within ~60 min.</td>
+            <td>Re-pulls the same-day CSV many times; loader dedupes but bandwidth is spent.</td>
+          </tr>
+          <tr>
+            <td><code>concurrency</code></td>
+            <td><span class="pill">Forbid + 50 min deadline</span></td>
+            <td>No overlapping runs; no zombie pods running past the next tick.</td>
+            <td>A slow run silently skips the next hour — watch <code>MissingJob</code> events.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============================== 06 Recent hardening ============================== -->
+  <section id="hardening">
+    <div class="sec-head"><span class="idx">06</span><h2>Recent hardening</h2><span class="count">6 changes</span></div>
+    <p class="sec-intro">
+      Issues surfaced from code review and dependency scanning. None were exploitable in production, but each tightens
+      the system or removes a latent risk.
+    </p>
+    <div class="sec-body">
+      <div class="grid">
+        <div class="card">
+          <div class="kicker">Security</div>
+          <h3>Path-traversal guard</h3>
+          <p>
+            <code>internal/ocireports</code> now resolves both <code>OutputDir</code> and the target path to absolutes,
+            then <code>filepath.Rel</code>-checks the result. Object names containing <code>../</code> are rejected
+            before any file is created.
+          </p>
+        </div>
+        <div class="card">
+          <div class="kicker">Dependency</div>
+          <h3>pgx CVE bump</h3>
+          <p>
+            <code>jackc/pgx/v5</code> bumped <code>v5.9.1 → v5.9.2</code> for GHSA-j88v-2chj-qfwx (placeholder confusion
+            in dollar-quoted SQL). Not currently exploitable — we use positional params and <code>CopyFrom</code>.
+          </p>
+        </div>
+        <div class="card">
+          <div class="kicker">Toolchain</div>
+          <h3>Go 1.26.3</h3>
+          <p>
+            <code>go.mod</code> and base image pinned to <code>1.26.3</code> for the stdlib TOCTOU + html/template CVEs.
+            Patch is pinned, not floating, so rebuilds are reproducible.
+          </p>
+        </div>
+        <div class="card">
+          <div class="kicker">Reliability</div>
+          <h3>Fail-soft loader</h3>
+          <p>
+            One bad CSV no longer aborts the batch. Each file marks <code>DONE</code>, <code>SKIP</code>, or
+            <code>FAIL</code>; the process exits <code>2</code> if any failed so k8s alerts but doesn't lose work.
+          </p>
+        </div>
+        <div class="card">
+          <div class="kicker">Reliability</div>
+          <h3>Per-file context</h3>
+          <p>
+            Replaces the shared 30-minute batch context. One slow file timing out no longer poisons every file
+            that comes after it.
+          </p>
+        </div>
+        <div class="card">
+          <div class="kicker">Correctness</div>
+          <h3>FOCUS tag synthesis</h3>
+          <p>
+            When a FOCUS CSV omits the <code>Tags</code> column entirely, allow-listed <code>tags/*</code> extras
+            used to be silently dropped. The loader now synthesizes the <code>tags</code> column on the fly.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== Footer ============================== -->
+  <footer>
+    <span class="k">spend, normalized — then forgotten</span>
+    <span>Go 1.26.3 · pgx v5.9.2 · oci-go-sdk v65 · <code>docs/architecture.html</code></span>
+  </footer>
+</div>
+
+<!-- ============================== Scrollspy ============================== -->
+<script>
+(function () {
+  const links = Array.from(document.querySelectorAll('.toc-side a[href^="#"]'));
+  if (!links.length) return;
+  const map = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+  const targets = [...map.keys()].map(id => document.getElementById(id)).filter(Boolean);
+  if (!targets.length) return;
+
+  const setActive = (id) => {
+    links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + id));
+  };
+
+  const obs = new IntersectionObserver((entries) => {
+    // Pick the topmost intersecting target.
+    const visible = entries
+      .filter(e => e.isIntersecting)
+      .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+    if (visible.length) setActive(visible[0].target.id);
+  }, { rootMargin: '-15% 0px -70% 0px', threshold: 0 });
+
+  targets.forEach(t => obs.observe(t));
+})();
+</script>
+
+<!-- ============================== xyflow ============================== -->
+<script type="module">
+import React from 'https://esm.sh/react@18.3.1';
+import { createRoot } from 'https://esm.sh/react-dom@18.3.1/client';
+import { ReactFlow, Background, Controls, MarkerType }
+  from 'https://esm.sh/@xyflow/react@12.3.5?deps=react@18.3.1,react-dom@18.3.1';
+
+const link = document.createElement('link');
+link.rel = 'stylesheet';
+link.href = 'https://esm.sh/@xyflow/react@12.3.5/dist/style.css';
+document.head.appendChild(link);
+
+const c = {
+  paper: '#FFFFFF', ivory: '#FAF9F5', slate: '#141413',
+  clay: '#D97757', clayD: '#B85C3E', oat: '#E3DACC', olive: '#788C5D',
+  g100: '#F0EEE6', g200: '#E6E3DA', g300: '#D1CFC5', g500: '#87867F', g700: '#3D3D3A',
+};
+
+const baseStyle = {
+  background: c.paper,
+  border: `1.5px solid ${c.g300}`,
+  borderRadius: 12,
+  padding: '12px 16px',
+  fontFamily: 'system-ui, -apple-system, sans-serif',
+  color: c.slate,
+  width: 210,
+  textAlign: 'center',
+  boxShadow: '0 2px 8px rgba(20,20,19,0.04)',
+};
+const sourceStyle   = { ...baseStyle, background: c.g100, borderColor: c.g500 };
+const decisionStyle = { ...baseStyle, background: c.oat, borderColor: c.slate, borderRadius: 999, padding: '10px 14px' };
+const heavyStyle    = { ...baseStyle, background: c.clay, color: c.paper, borderColor: c.clayD };
+const targetStyle   = { ...baseStyle, background: c.g100, borderColor: c.olive };
+
+const h = React.createElement;
+
+const labelEl = (kicker, title, light) =>
+  h('div', null,
+    h('div', {
+      style: {
+        fontFamily: 'ui-monospace, monospace',
+        fontSize: 9.5,
+        letterSpacing: '0.1em',
+        textTransform: 'uppercase',
+        color: light ? 'rgba(255,255,255,0.75)' : c.g500,
+        marginBottom: 4,
+      }
+    }, kicker),
+    h('div', {
+      style: {
+        fontFamily: 'ui-serif, Georgia, serif',
+        fontWeight: 500,
+        fontSize: 14,
+        lineHeight: 1.25,
+      }
+    }, title),
+  );
+
+const mk = (id, x, y, kicker, title, style, light) => ({
+  id,
+  position: { x, y },
+  data: { label: labelEl(kicker, title, !!light) },
+  style,
+});
+
+// Cleaner topology: drop the /data and tags.yaml nodes; encode them as edge
+// labels and prose. Eliminates the diagonals that were crossing other nodes.
+const nodes = [
+  mk('bucket',   20,   80,  'OCI bucket',  'reporting bucket "bling"',  sourceStyle),
+  mk('cron',     20,   500, 'k8s cronjob', 'hourly tick · Forbid',      sourceStyle),
+  mk('pod',      280,  290, 'job pod',     'scratch · UID 1000',        baseStyle),
+  mk('load',     540,  290, 'entrypoint',  'oci-load orchestrator',     heavyStyle, true),
+  mk('dl',       800,  290, 'in-process',  'ocireports.Download',       baseStyle),
+  mk('focusCmd', 1060, 180, 'subcommand',  'oci-costing focus',         baseStyle),
+  mk('ociCmd',   1060, 400, 'subcommand',  'oci-costing oci',           baseStyle),
+  mk('pgFocus',  1320, 180, 'table',       'focus_data_table',          targetStyle),
+  mk('pgOci',    1320, 400, 'table',       'oci_cost_report (jsonb)',   targetStyle),
+  mk('dash',     1580, 290, 'downstream',  'FinOps dashboards',         targetStyle),
+];
+
+const edge = (id, source, target, label, dashed) => ({
+  id, source, target, label,
+  type: 'smoothstep',
+  animated: !dashed,
+  style: { stroke: dashed ? c.g500 : c.slate, strokeWidth: 1.5, strokeDasharray: dashed ? '6 4' : undefined },
+  labelStyle: { fontFamily: 'ui-monospace, monospace', fontSize: 10, fill: c.g700 },
+  labelBgStyle: { fill: c.ivory },
+  labelBgPadding: [4, 4],
+  labelBgBorderRadius: 4,
+  markerEnd: { type: MarkerType.ArrowClosed, color: dashed ? c.g500 : c.slate, width: 16, height: 16 },
+});
+
+const edges = [
+  edge('e-cron-pod',   'cron',     'pod',      'tick'),
+  edge('e-pod-load',   'pod',      'load'),
+  edge('e-bucket-dl',  'bucket',   'dl',       'csv.gz'),
+  edge('e-load-dl',    'load',     'dl',       'list/get'),
+  edge('e-dl-focus',   'dl',       'focusCmd', '/data/focus'),
+  edge('e-dl-oci',     'dl',       'ociCmd',   '/data/cost'),
+  edge('e-focus-pg',   'focusCmd', 'pgFocus',  'COPY'),
+  edge('e-oci-pg',     'ociCmd',   'pgOci',    'COPY'),
+  edge('e-pg-dash',    'pgFocus',  'dash',     'SQL', true),
+  edge('e-pgo-dash',   'pgOci',    'dash',     'SQL', true),
+];
+
+function Flow() {
+  return h(ReactFlow, {
+    nodes,
+    edges,
+    fitView: true,
+    fitViewOptions: { padding: 0.15 },
+    nodesDraggable: true,
+    panOnDrag: true,
+    zoomOnScroll: false,
+    zoomOnPinch: true,
+    minZoom: 0.4,
+    maxZoom: 1.6,
+  },
+    h(Background, { color: c.g300, gap: 22, size: 1 }),
+    h(Controls, { showInteractive: false }),
+  );
+}
+
+createRoot(document.getElementById('flow-mount')).render(h(Flow));
+</script>
+</body>
+</html>

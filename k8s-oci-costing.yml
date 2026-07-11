@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oci-finops
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: oci-costing-load
+  namespace: oci-finops
+  # Identity matched by root-tenancy IAM policy oci-costing-workload-usage-report:
+  #   endorse any-user ... where all { request.principal.type = 'workload',
+  #     request.principal.cluster_id = '<develop-aiplat ocid>',
+  #     request.principal.namespace = 'oci-finops',
+  #     request.principal.service_account = 'oci-costing-load' }
+  # Renaming namespace or SA requires updating that policy in lockstep.
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: oci-costing-load
+  namespace: oci-finops
+spec:
+  # Hourly. Each run pulls today + yesterday; loader dedupes via source_filename.
+  schedule: "0 * * * *"
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid # never overlap runs
+  startingDeadlineSeconds: 600 # skip if controller lagged > 10 min
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1 # one retry then give up
+      activeDeadlineSeconds: 3000 # 50 min hard cap (cron is hourly)
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: oci-costing-load # OKE Workload Identity → OCI Resource Principal
+          imagePullSecrets:
+            - name: ocir-pull
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: loader
+              # NOTE: this placeholder is rewritten by scripts/deploy.sh before
+              # `kubectl apply`. Do NOT run `kubectl apply -f k8s-oci-costing.yml`
+              # directly without first running `./scripts/deploy.sh apply` or
+              # patching this line.
+              image: iad.ocir.io/ido20ydwejhf/app-dev-datasvcs/oci-costing:latest
+              imagePullPolicy: Always # :latest tag — node cache must not win
+              env:
+                - name: CLICKHOUSE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: oci-costing-secret
+                      key: clickhouse_url
+                - name: WRITE_PG
+                  value: "false"
+                - name: WRITE_CH
+                  value: "true"
+                - name: OCI_AUTH
+                  value: workload_identity # fail hard, no node-identity fallback
+                # Required by OCI Go SDK for OKE Workload Identity:
+                - name: OCI_RESOURCE_PRINCIPAL_VERSION
+                  value: "2.2"
+                - name: OCI_RESOURCE_PRINCIPAL_REGION
+                  value: us-ashburn-1
+                - name: OCI_DATA_DIR
+                  value: /data
+                - name: TAGS_CONFIG
+                  value: /etc/oci-costing/tags.yaml
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                - name: tmp
+                  mountPath: /tmp
+                - name: tags
+                  mountPath: /etc/oci-costing
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: "64m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "128m"
+                  memory: "512Mi"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+          volumes:
+            - name: data
+              emptyDir:
+                sizeLimit: 5Gi
+            - name: tmp
+              emptyDir:
+                sizeLimit: 256Mi
+            - name: tags
+              configMap:
+                name: oci-costing-tags

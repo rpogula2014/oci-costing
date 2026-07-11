@@ -1,0 +1,11 @@
+# Tags to extract from tags/* CSV columns and merge into JSONB tags field
+# key: exact CSV header suffix after "tags/" prefix
+# db_key: key name stored in JSONB (optional, defaults to key)
+
+tags:
+  - key: ATD-Billing.ComponentType
+  - key: ATD-Billing.Environment
+  - key: ATD-Billing.CostCenter
+  - key: ATD-Ops.ResourceName
+  - key: ATD-Ops.ResourceType
+  - key: Oracle-Tags.CreatedBy

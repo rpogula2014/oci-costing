@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oci-costing-tags
+  namespace: oci-finops
+data:
+  tags.yaml: |
+    tags:
+      - key: ATD-Billing.ComponentType
+      - key: ATD-Billing.Environment
+      - key: ATD-Billing.CostCenter
+      - key: ATD-Ops.ResourceName
+      - key: ATD-Ops.ResourceType
+      - key: Oracle-Tags.CreatedBy

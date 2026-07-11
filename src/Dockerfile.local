@@ -1,0 +1,36 @@
+# Local build - uses vendored deps + bookworm to avoid ZScaler TLS issues.
+# Usage: docker build -f deploy/Dockerfile.local -t oci-costing:local .
+
+FROM golang:1.26.3-bookworm AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+COPY vendor/ vendor/
+COPY cmd/ cmd/
+COPY internal/ internal/
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -trimpath -ldflags="-s -w" -o /out/oci-load-bills ./cmd/oci-load-bills \
+ && CGO_ENABLED=0 GOOS=linux go build -mod=vendor -trimpath -ldflags="-s -w" -o /out/oci-pull-bills ./cmd/oci-pull-bills \
+ && mkdir -p /rootfs/data /rootfs/tmp /rootfs/home/app/.oci /rootfs/etc/ssl/oci /rootfs/etc/oci-costing /rootfs/etc/ssl/certs \
+ && echo 'app:x:1000:1000:app:/home/app:/sbin/nologin' > /rootfs/etc/passwd.app \
+ && echo 'app:x:1000:' > /rootfs/etc/group.app \
+ && cp /etc/ssl/certs/ca-certificates.crt /rootfs/etc/ssl/certs/ca-certificates.crt \
+ && cp /usr/share/zoneinfo/UTC /rootfs/etc/localtime \
+ && chown -R 1000:1000 /rootfs/data /rootfs/tmp /rootfs/home/app
+
+FROM scratch
+COPY --from=build /rootfs/ /
+COPY --from=build /rootfs/etc/passwd.app /etc/passwd
+COPY --from=build /rootfs/etc/group.app /etc/group
+COPY --from=build /out/oci-pull-bills /oci-pull-bills
+COPY --from=build /out/oci-load-bills /oci-load-bills
+COPY tags.yaml /etc/oci-costing/tags.yaml
+COPY NOTICE /NOTICE
+
+ENV OCI_LOAD_BILLS_BIN=/oci-load-bills \
+    OCI_DATA_DIR=/data \
+    TAGS_CONFIG=/etc/oci-costing/tags.yaml \
+    DB_SSLROOTCERT=/etc/ssl/oci/dbsystem.pub \
+    HOME=/home/app \
+    TZ=UTC
+
+USER 1000:1000
+ENTRYPOINT ["/oci-pull-bills"]

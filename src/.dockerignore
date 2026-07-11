@@ -1,0 +1,15 @@
+# Keep build context small: Go sources + go.mod/sum + tags.yaml + NOTICE only.
+data/
+oci-dbs/
+dashboard/
+docs/
+deploy/
+.git/
+.tokensave/
+node-compile-cache/
+*.log
+oci-costing
+oci-load
+oci-load-bills
+oci-pull-bills
+.env*
