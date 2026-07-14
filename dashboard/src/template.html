@@ -1,206 +1,285 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OCI FinOps — Deep Dive</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.8/400.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.8/700.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.8/800.css">
-<style>
-<!--__STYLES__-->
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OCI FinOps — Deep Dive</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.8/400.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.8/700.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.8/800.css">
+  <style>
+    <!--__STYLES__-->
+  </style>
 </head>
+
 <body>
 
-<header class="topbar">
-  <h1>OCI FinOps · Deep Dive</h1>
-  <span class="sub" id="range-label"></span>
-  <span class="spacer"></span>
-  <span class="sub">oci-finops · oci_cost_report_attributed</span>
-  <button class="btn" id="theme-btn">◐ theme</button>
-</header>
+  <header class="topbar">
+    <h1>ATD OCI FinOps</h1>
+    <span class="sub" id="range-label"></span>
+    <span class="spacer"></span>
+    <span class="sub">oci-finops · oci_cost_report_attributed</span>
+    <button class="btn" id="theme-btn">◐ theme</button>
+  </header>
 
-<main>
-  <div class="controls-top">
-    <label class="ctl"><span class="eyebrow">Granularity</span>
-      <span class="seg" id="gran-seg">
-        <button data-g="day">Day</button><button data-g="week" class="on">Week</button><button data-g="month">Month</button>
-      </span>
-    </label>
-    <label class="ctl"><span class="eyebrow">Group by</span>
-      <select id="groupby">
-        <option value="cc" selected>Cost center</option>
-        <option value="env">Environment</option>
-        <option value="comp">Component type</option>
-        <option value="cpt">Compartment</option>
-        <option value="svc">Service</option>
-        <option value="rtype">Resource type</option>
-        <option value="rname">Resource name</option>
-      </select>
-    </label>
-    <label class="ctl"><span class="eyebrow">Range</span>
-      <select id="range">
-        <option value="all" selected>All data</option>
-        <option value="90">Last 90 days</option>
-        <option value="30">Last 30 days</option>
-        <option value="7">Last 7 days</option>
-        <option value="mtd">Month to date</option>
-      </select>
-    </label>
-  </div>
+  <main>
+    <div class="controls-top">
+      <label class="ctl"><span class="eyebrow">Granularity</span>
+        <span class="seg" id="gran-seg">
+          <button data-g="day">Day</button><button data-g="week" class="on">Week</button><button
+            data-g="month">Month</button>
+        </span>
+      </label>
+      <label class="ctl"><span class="eyebrow">Group by</span>
+        <select id="groupby">
+          <option value="cc" selected>Cost center</option>
+          <option value="env">Environment</option>
+          <option value="comp">Component type</option>
+          <option value="cpt">Compartment</option>
+          <option value="svc">Service</option>
+          <option value="rtype">Resource type</option>
+          <option value="rname">Resource name</option>
+        </select>
+      </label>
+      <label class="ctl"><span class="eyebrow">Range</span>
+        <select id="range">
+          <option value="all" selected>All data</option>
+          <option value="90">Last 90 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="7">Last 7 days</option>
+          <option value="mtd">Month to date</option>
+        </select>
+      </label>
+    </div>
 
-  <div class="filterbar">
-    <span class="fb-caption eyebrow">Filters</span>
-    <label class="ctl"><span class="eyebrow">Environment</span><select id="f-env"></select></label>
-    <label class="ctl"><span class="eyebrow">Cost center</span><select id="f-cc"></select></label>
-    <label class="ctl"><span class="eyebrow">Component</span><select id="f-comp"></select></label>
-    <label class="ctl"><span class="eyebrow">Compartment</span><select id="f-cpt"></select></label>
-    <label class="ctl"><span class="eyebrow">Service</span><select id="f-svc"></select></label>
-    <label class="ctl"><span class="eyebrow">Resource type</span><select id="f-rtype"></select></label>
-    <label class="ctl"><span class="eyebrow">Resource name</span><select id="f-rname"></select></label>
-    <label class="ctl"><span class="eyebrow">Name contains</span>
-      <input id="f-text" type="search" placeholder="free text…"></label>
-    <label class="ctl"><span class="eyebrow">&nbsp;</span><button class="btn" id="clear">Reset</button></label>
-  </div>
+    <div class="filterbar">
+      <span class="fb-caption eyebrow">Filters</span>
+      <label class="ctl"><span class="eyebrow">Environment</span><select id="f-env"></select></label>
+      <label class="ctl"><span class="eyebrow">Cost center</span><select id="f-cc"></select></label>
+      <label class="ctl"><span class="eyebrow">Component</span><select id="f-comp"></select></label>
+      <label class="ctl"><span class="eyebrow">Compartment</span><select id="f-cpt"></select></label>
+      <label class="ctl"><span class="eyebrow">Service</span><select id="f-svc"></select></label>
+      <label class="ctl"><span class="eyebrow">Resource type</span><select id="f-rtype"></select></label>
+      <label class="ctl"><span class="eyebrow">Resource name</span><select id="f-rname"></select></label>
+      <label class="ctl"><span class="eyebrow">Name contains</span>
+        <input id="f-text" type="search" placeholder="free text…"></label>
+      <label class="ctl"><span class="eyebrow">&nbsp;</span><button class="btn" id="clear">Reset</button></label>
+    </div>
 
-  <div id="text-matches" style="margin:-6px 0 14px 0"></div>
+    <div id="text-matches" style="margin:-6px 0 14px 0"></div>
 
-  <nav class="tabbar">
-    <button data-t="overview" class="on">Overview</button>
-    <button data-t="investigate">Investigate</button>
-    <button data-t="hygiene">Tag hygiene</button>
-  </nav>
+    <nav class="tabbar">
+      <button data-t="overview" class="on">Overview</button>
+      <button data-t="investigate">Investigate</button>
+      <button data-t="hygiene">Tag hygiene</button>
+    </nav>
 
-  <section class="kpis" id="kpis" data-tab="overview"></section>
+    <section class="kpis" id="kpis" data-tab="overview"></section>
 
-  <section class="card" data-tab="overview">
-    <div class="card-head"><h2>Spend over time</h2><span class="hint" id="trend-hint"></span></div>
-    <div id="trend"></div>
-    <div class="legend" id="trend-legend"></div>
-  </section>
+    <section class="card" data-tab="overview">
+      <div class="card-head">
+        <h2>Spend over time</h2><span class="hint" id="trend-hint"></span>
+      </div>
+      <div id="trend"></div>
+      <div class="legend" id="trend-legend"></div>
+    </section>
 
-  <section class="card" data-tab="overview">
-    <div class="card-head"><h2 id="rank-title">Breakdown</h2><span class="hint">share of filtered spend — click a bar to filter</span></div>
-    <div class="rank" id="rank"></div>
-  </section>
+    <section class="card" data-tab="overview">
+      <div class="card-head">
+        <h2 id="rank-title">Breakdown</h2><span class="hint">share of filtered spend — click a bar to filter</span>
+      </div>
+      <div class="rank" id="rank"></div>
+    </section>
 
-  <div class="row2" data-tab="investigate">
-    <section class="card">
-      <div class="card-head"><h2>Resource movers</h2><span class="hint" id="rmovers-hint"></span></div>
+    <div class="row2" data-tab="investigate">
+      <section class="card">
+        <div class="card-head">
+          <h2>Resource movers</h2><span class="hint" id="rmovers-hint"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Resource</th>
+                <th>Service</th>
+                <th>Cost center</th>
+                <th class="r">Prev</th>
+                <th class="r">Latest</th>
+                <th class="r">Δ</th>
+                <th class="r">Δ%</th>
+              </tr>
+            </thead>
+            <tbody id="rmovers"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head">
+          <h2>Top movers</h2><span class="hint" id="movers-hint"></span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Group</th>
+              <th class="r">Prev</th>
+              <th class="r">Latest</th>
+              <th class="r">Δ</th>
+              <th class="r">Δ%</th>
+            </tr>
+          </thead>
+          <tbody id="movers"></tbody>
+        </table>
+      </section>
+    </div>
+
+    <section class="card" data-tab="investigate">
+      <div class="card-head">
+        <h2>Compare periods</h2><span class="hint" id="cmp-hint"></span>
+        <span class="spacer"></span>
+        <select id="cmp-a"></select>
+        <span class="eyebrow" style="margin:0 8px">vs</span>
+        <select id="cmp-b"></select>
+        <select id="cmp-dim" style="margin-left:12px">
+          <option value="cc" selected>by cost center</option>
+          <option value="env">by environment</option>
+          <option value="comp">by component</option>
+          <option value="cpt">by compartment</option>
+          <option value="svc">by service</option>
+          <option value="rtype">by resource type</option>
+          <option value="rname">by resource</option>
+        </select>
+      </div>
       <div style="overflow-x:auto">
-      <table><thead><tr><th>Resource</th><th>Service</th><th>Cost center</th>
-        <th class="r">Prev</th><th class="r">Latest</th><th class="r">Δ</th><th class="r">Δ%</th></tr></thead>
-      <tbody id="rmovers"></tbody></table>
+        <table>
+          <thead>
+            <tr>
+              <th id="cmp-name-h">Cost center</th>
+              <th class="r" id="cmp-a-h">A</th>
+              <th class="r" id="cmp-b-h">B</th>
+              <th class="r">Δ</th>
+              <th class="r">Δ%</th>
+            </tr>
+          </thead>
+          <tbody id="cmp-body"></tbody>
+        </table>
       </div>
     </section>
-    <section class="card">
-      <div class="card-head"><h2>Top movers</h2><span class="hint" id="movers-hint"></span></div>
-      <table><thead><tr><th>Group</th><th class="r">Prev</th><th class="r">Latest</th><th class="r">Δ</th><th class="r">Δ%</th></tr></thead>
-      <tbody id="movers"></tbody></table>
+
+    <section class="card" data-tab="hygiene">
+      <div class="card-head">
+        <h2>Untagged spend watch</h2>
+        <span class="hint">rows missing ATD-Billing.CostCenter after tag backfill — genuine gap</span>
+      </div>
+      <div id="untag-kpi" style="margin-bottom:10px"></div>
+      <div id="untag"></div>
     </section>
-  </div>
 
-  <section class="card" data-tab="investigate">
-    <div class="card-head"><h2>Compare periods</h2><span class="hint" id="cmp-hint"></span>
-      <span class="spacer"></span>
-      <select id="cmp-a"></select>
-      <span class="eyebrow" style="margin:0 8px">vs</span>
-      <select id="cmp-b"></select>
-      <select id="cmp-dim" style="margin-left:12px">
-        <option value="cc" selected>by cost center</option>
-        <option value="env">by environment</option>
-        <option value="comp">by component</option>
-        <option value="cpt">by compartment</option>
-        <option value="svc">by service</option>
-        <option value="rtype">by resource type</option>
-        <option value="rname">by resource</option>
-      </select>
-    </div>
-    <div style="overflow-x:auto">
-    <table><thead><tr><th id="cmp-name-h">Cost center</th>
-      <th class="r" id="cmp-a-h">A</th><th class="r" id="cmp-b-h">B</th>
-      <th class="r">Δ</th><th class="r">Δ%</th></tr></thead>
-    <tbody id="cmp-body"></tbody></table>
-    </div>
-  </section>
+    <section class="card" data-tab="hygiene">
+      <div class="card-head">
+        <h2>Idle / suspect resources</h2><span class="hint" id="idle-hint"></span>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Resource</th>
+              <th>Type</th>
+              <th>Service</th>
+              <th>Cost center</th>
+              <th class="r">$/mo</th>
+              <th class="r">Spread</th>
+              <th class="r">Months</th>
+              <th class="r">Annualized</th>
+            </tr>
+          </thead>
+          <tbody id="idle-body"></tbody>
+        </table>
+      </div>
+    </section>
 
-  <section class="card" data-tab="hygiene">
-    <div class="card-head">
-      <h2>Untagged spend watch</h2>
-      <span class="hint">rows missing ATD-Billing.CostCenter after tag backfill — genuine gap</span>
-    </div>
-    <div id="untag-kpi" style="margin-bottom:10px"></div>
-    <div id="untag"></div>
-  </section>
+    <section class="card" data-tab="hygiene">
+      <div class="card-head">
+        <h2>OCID lookup</h2>
+        <span class="hint">search by OCID or resource name — cost by selected granularity, latest tags</span>
+      </div>
+      <input id="ocid-q" type="search" placeholder="paste an OCID (or fragment), or type a resource name…"
+        style="width:100%;background:var(--plane);color:var(--ink-1);border:1px solid var(--grid);border-radius:8px;padding:8px 12px;font:12.5px ui-monospace,Menlo,monospace;outline:none">
+      <div id="ocid-matches" style="margin-top:10px"></div>
+      <div id="ocid-view" style="margin-top:6px"></div>
+    </section>
 
-  <section class="card" data-tab="hygiene">
-    <div class="card-head"><h2>Idle / suspect resources</h2><span class="hint" id="idle-hint"></span></div>
-    <div style="overflow-x:auto">
-    <table><thead><tr><th>Resource</th><th>Type</th><th>Service</th><th>Cost center</th>
-      <th class="r">$/mo</th><th class="r">Spread</th><th class="r">Months</th><th class="r">Annualized</th></tr></thead>
-    <tbody id="idle-body"></tbody></table>
-    </div>
-  </section>
+    <section class="card" id="detail-card" data-tab="investigate">
+      <div class="card-head">
+        <h2>Detail</h2><span class="hint" id="detail-hint"></span>
+        <span class="spacer"></span>
+        <select id="detail-g" title="Group rows" style="margin-right:8px">
+          <option value="">No grouping</option>
+          <option value="period">Group: period</option>
+          <option value="env">Group: environment</option>
+          <option value="cc">Group: cost center</option>
+          <option value="cpt">Group: compartment</option>
+        </select>
+        <select id="detail-g2" title="Sub-group rows" style="margin-right:8px">
+          <option value="">then: none</option>
+          <option value="period">then: period</option>
+          <option value="env">then: environment</option>
+          <option value="cc">then: cost center</option>
+          <option value="cpt">then: compartment</option>
+          <option value="svc">then: service</option>
+        </select>
+        <input id="detail-q" type="search" placeholder="search table…"
+          style="background:var(--plane);color:var(--ink-1);border:1px solid var(--grid);border-radius:4px;padding:5px 10px;font:inherit;font-size:12.5px;width:200px;outline:none;margin-right:8px">
+        <button class="btn" onclick="exportCSV()">Export CSV</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr id="detail-head">
+              <th class="sortable" data-sk="period" style="cursor:pointer" title="click to sort">Period<span
+                  class="sarrow"></span></th>
+              <th class="sortable" data-sk="env" style="cursor:pointer" title="click to sort">Env<span
+                  class="sarrow"></span></th>
+              <th class="sortable" data-sk="cc" style="cursor:pointer" title="click to sort">Cost center<span
+                  class="sarrow"></span></th>
+              <th class="sortable" data-sk="comp" style="cursor:pointer" title="click to sort">Component<span
+                  class="sarrow"></span></th>
+              <th class="sortable" data-sk="cpt" style="cursor:pointer" title="click to sort">Compartment<span
+                  class="sarrow"></span></th>
+              <th class="sortable" data-sk="svc" style="cursor:pointer" title="click to sort">Service<span
+                  class="sarrow"></span></th>
+              <th class="sortable" data-sk="rtype" style="cursor:pointer" title="click to sort">Resource type<span
+                  class="sarrow"></span></th>
+              <th class="sortable" data-sk="rname" style="cursor:pointer" title="click to sort">Resource name<span
+                  class="sarrow"></span></th>
+              <th class="sortable" data-sk="ocid" style="cursor:pointer" title="click to sort">Resource OCID<span
+                  class="sarrow"></span></th>
+              <th class="r sortable" data-sk="cost" style="cursor:pointer" title="click to sort">Cost<span
+                  class="sarrow"></span></th>
+            </tr>
+          </thead>
+          <tbody id="detail"></tbody>
+        </table>
+      </div>
+    </section>
 
-  <section class="card" data-tab="hygiene">
-    <div class="card-head">
-      <h2>OCID lookup</h2>
-      <span class="hint">search by OCID or resource name — cost by selected granularity, latest tags</span>
-    </div>
-    <input id="ocid-q" type="search" placeholder="paste an OCID (or fragment), or type a resource name…"
-      style="width:100%;background:var(--plane);color:var(--ink-1);border:1px solid var(--grid);border-radius:8px;padding:8px 12px;font:12.5px ui-monospace,Menlo,monospace;outline:none">
-    <div id="ocid-matches" style="margin-top:10px"></div>
-    <div id="ocid-view" style="margin-top:6px"></div>
-  </section>
+    <footer>
+      <span>Source: ClickHouse oci-finops.oci_cost_report_attributed (corrections + latest-tags-per-OCID backfill
+        applied)</span>
+      <span>Snapshot: 2026-07-10</span>
+      <span>Amounts: USD, cost_mycost</span>
+      <span>Latest period may be partial (July in progress)</span>
+    </footer>
+  </main>
 
-  <section class="card" id="detail-card" data-tab="investigate">
-    <div class="card-head">
-      <h2>Detail</h2><span class="hint" id="detail-hint"></span>
-      <span class="spacer"></span>
-      <select id="detail-g" title="Group rows"
-        style="margin-right:8px">
-        <option value="">No grouping</option>
-        <option value="period">Group: period</option>
-        <option value="env">Group: environment</option>
-        <option value="cc">Group: cost center</option>
-        <option value="cpt">Group: compartment</option>
-      </select>
-      <select id="detail-g2" title="Sub-group rows"
-        style="margin-right:8px">
-        <option value="">then: none</option>
-        <option value="period">then: period</option>
-        <option value="env">then: environment</option>
-        <option value="cc">then: cost center</option>
-        <option value="cpt">then: compartment</option>
-        <option value="svc">then: service</option>
-      </select>
-      <input id="detail-q" type="search" placeholder="search table…"
-        style="background:var(--plane);color:var(--ink-1);border:1px solid var(--grid);border-radius:4px;padding:5px 10px;font:inherit;font-size:12.5px;width:200px;outline:none;margin-right:8px">
-      <button class="btn" onclick="exportCSV()">Export CSV</button>
-    </div>
-    <div style="overflow-x:auto">
-    <table><thead><tr id="detail-head">
-      <th class="sortable" data-sk="period" style="cursor:pointer" title="click to sort">Period<span class="sarrow"></span></th><th class="sortable" data-sk="env" style="cursor:pointer" title="click to sort">Env<span class="sarrow"></span></th><th class="sortable" data-sk="cc" style="cursor:pointer" title="click to sort">Cost center<span class="sarrow"></span></th><th class="sortable" data-sk="comp" style="cursor:pointer" title="click to sort">Component<span class="sarrow"></span></th><th class="sortable" data-sk="cpt" style="cursor:pointer" title="click to sort">Compartment<span class="sarrow"></span></th><th class="sortable" data-sk="svc" style="cursor:pointer" title="click to sort">Service<span class="sarrow"></span></th><th class="sortable" data-sk="rtype" style="cursor:pointer" title="click to sort">Resource type<span class="sarrow"></span></th><th class="sortable" data-sk="rname" style="cursor:pointer" title="click to sort">Resource name<span class="sarrow"></span></th><th class="sortable" data-sk="ocid" style="cursor:pointer" title="click to sort">Resource OCID<span class="sarrow"></span></th><th class="r sortable" data-sk="cost" style="cursor:pointer" title="click to sort">Cost<span class="sarrow"></span></th>
-    </tr></thead><tbody id="detail"></tbody></table>
-    </div>
-  </section>
+  <div id="tip"></div>
 
-  <footer>
-    <span>Source: ClickHouse oci-finops.oci_cost_report_attributed (corrections + latest-tags-per-OCID backfill applied)</span>
-    <span>Snapshot: 2026-07-10</span>
-    <span>Amounts: USD, cost_mycost</span>
-    <span>Latest period may be partial (July in progress)</span>
-  </footer>
-</main>
-
-<div id="tip"></div>
-
-<script>
-<!--__DATA__-->
-</script>
-<script>
-<!--__APP__-->
-</script>
+  <script>
+    <!--__DATA__-->
+  </script>
+  <script>
+    <!--__APP__-->
+  </script>
 </body>
+
 </html>

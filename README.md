@@ -172,6 +172,10 @@ oci-costing-secret.example.yml
 ├── oci-costing-configmap.yml
 ├── oci-dbs/clickhouse/     # CH DDL + PG→CH backfill script
 ├── scripts/daily_load.sh   # legacy bash wrapper (kept for local dev; container uses oci-pull-bills)
+├── baml_src/               # BAML source: NL→SQL agent (types, prompts, SQL guard + tests)
+├── service/                # nl-cost-agent FastAPI service (generated baml_sdk + app/ + tests/)
+├── k8s-nl-cost-agent.yml   # agent Deployment + Service (oci-finops ns)
+├── nl-cost-agent-secret.example.yml
 ```
 
 ## Database scripts
@@ -185,6 +189,111 @@ Schema dumped from the live DB via `oci-dbs/postgresql/dump.sh` (uses `pg_dump`,
 | `dump.sh` | Regenerates the above from the live DB |
 
 Both fact tables use monthly `PARTITION BY RANGE` on the period-start timestamp; new partitions must be created before the month begins (loader does not auto-create). See `oci-dbs/postgresql/README.md` for the partition DDL template and view explanation.
+
+## NL cost query agent (`service/`)
+
+Ask OCI cost questions in plain English; a BAML-typed LLM function generates ClickHouse SQL, a deterministic guard enforces SELECT-only + row limits, and the service executes and summarizes. LLM logic lives in `baml_src/` (edit with `baml check` / `baml test`; regenerate SDK with `baml generate`).
+
+### `POST /ask`
+
+Request:
+
+```json
+{"question": "total cost by service last month", "max_rows": 500}
+```
+
+`max_rows` optional (default 500, hard cap 10000).
+
+Responses:
+
+| Status | Body | Meaning |
+|---|---|---|
+| 200 | `{"sql", "explanation", "caveats": [], "rows": [], "truncated": bool, "summary"}` | success; `truncated: true` = more rows exist than `max_rows` |
+| 422 | `{"detail": "<reason>"}` | question refused (off-topic) or unsafe SQL blocked by guard |
+| 502 | `{"detail": "<error>"}` | LLM gateway or ClickHouse failure |
+
+```mermaid
+sequenceDiagram
+    participant U as Client
+    participant S as FastAPI /ask
+    participant L as LLM gateway (BAML GenerateQuery)
+    participant G as Guard (deterministic)
+    participant C as ClickHouse oci-finops
+    U->>S: POST /ask {question, max_rows}
+    S->>L: question + static schema context
+    L-->>S: Query{sql} | Refusal (→ 422)
+    S->>G: check_sql + inject LIMIT max_rows+1
+    G-->>S: GuardOk | GuardError (→ 422)
+    S->>C: HTTP SELECT (read-only)
+    C-->>S: rows + meta (Decimal→number normalized)
+    S->>L: Summarize(question, sql, sample rows)
+    S-->>U: 200 {sql, rows, truncated, summary}
+```
+
+### `GET /health`
+
+200 `{"status":"ok"}` when ClickHouse answers `SELECT 1`; 503 otherwise. Used by k8s probes.
+
+```mermaid
+flowchart LR
+    P[k8s probe] --> H[/GET /health/] --> C[(ClickHouse SELECT 1)] -->|ok| R200[200 ok]
+    C -->|unreachable| R503[503]
+```
+
+### Env vars
+
+| Var | Required | Purpose |
+|---|---|---|
+| `CLICKHOUSE_URL` | yes | DSN with creds; HTTP port coerced to 8123 even for native-shaped DSNs |
+| `LLM_BASE_URL` | yes | OpenAI-compatible gateway base URL |
+| `LLM_API_KEY` | yes | gateway key |
+| `LLM_MODEL` | yes | model name at the gateway |
+
+Service fails fast at startup if any are missing. Secrets deploy via `nl-cost-agent-secret.example.yml` pattern (copy, fill, apply; real file gitignored).
+
+### Run
+
+```
+cd service
+uv sync && uv run pytest            # unit tests (no LLM/CH needed)
+uv run uvicorn app.main:app         # local run (env vars above required)
+docker build -t nl-cost-agent .     # image
+kubectl apply -f k8s-nl-cost-agent.yml
+```
+
+## Known issues
+
+### Stale / incomplete resource tags in OCI billing export
+
+OCI's cost-and-usage export bakes tags into each line item **at usage time**. Re-tagging
+a resource in the OCI console does **not** rewrite already-emitted line items, and there is
+often a lag (and occasionally a persistent gap) before the new tags appear in the export at
+all. As a result the dashboard can show tag values that differ from the live console.
+
+Confirmed example (2026-07): Autonomous DB
+`ocid1.autonomousdatabase.oc1.iad.anuwcljr57qcn2ya2iqp2vlwmtkggoekoklifwpasjapizvmvs4i32cbce5a`
+shows `ComponentType=Database` + `ResourceType=AJD` in the console, but the Resources view
+renders `Component=AJD`, `Resource type=(untagged)`.
+
+- Root cause is **upstream OCI data**, not the extract/loader, the ClickHouse view, the API,
+  or the UI — all faithfully pass through what OCI emits. Verified against the untouched
+  source `.gz` (`tags/ATD-Ops.ResourceType` is empty and `ComponentType=AJD` for every
+  line item of this resource).
+- The tags flipped in the billing feed around **2026-05-16**; correct tags stopped ingesting
+  after ~07-10. So it is a real OCI-side tag change, not just short-term propagation lag.
+- The `oci_cost_report_attributed` view resolves "latest tags" via
+  `argMax(tags, lineitem_intervalusagestart)`, so it can only surface tag values that exist
+  in some line item. If OCI never emits the corrected tags, the view cannot show them.
+
+**Diagnosing:** pull the latest `source_filename` for the OCID from `oci_cost_report`, then
+inspect that same `.gz` in `data/cost/` — the raw file is the source of truth.
+
+**Mitigation options (not yet implemented):**
+- Confirm the corrected tags are saved as *defined* tags on the resource, then wait for the
+  next export cycle; re-check the newest source file.
+- Optionally harden the view to prefer the most-complete tag map
+  (`argMax(tags, (length(mapKeys(tags)), lineitem_intervalusagestart))`) as a tie-break —
+  tradeoff: this would mask a *legitimate* tag removal.
 
 ## Roadmap
 

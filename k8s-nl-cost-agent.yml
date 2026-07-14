@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nl-cost-agent
+  namespace: oci-finops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nl-cost-agent
+  template:
+    metadata:
+      labels:
+        app: nl-cost-agent
+    spec:
+      imagePullSecrets:
+        - name: ocir-pull
+      containers:
+        - name: agent
+          image: iad.ocir.io/ido20ydwejhf/app-dev-datasvcs/nl-cost-agent:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: CLICKHOUSE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nl-cost-agent-secret
+                  key: clickhouse_url
+            - name: LLM_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nl-cost-agent-secret
+                  key: llm_base_url
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nl-cost-agent-secret
+                  key: llm_api_key
+            - name: LLM_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: nl-cost-agent-secret
+                  key: llm_model
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nl-cost-agent
+  namespace: oci-finops
+spec:
+  selector:
+    app: nl-cost-agent
+  ports:
+    - port: 80
+      targetPort: 8000

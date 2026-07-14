@@ -65,5 +65,6 @@ update = function(){ _updOrig(); if(ocidSel>=0) selectOcid(ocidSel); };
 
 fillFilters();
 applyHash();
+refreshFiltersFrom(0); // narrow options to hash-restored selections
 setTab(activeTab);
 update();

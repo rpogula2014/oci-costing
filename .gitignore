@@ -29,3 +29,10 @@ oci-load-bills
 oci-pull-bills
 TRASH/
 TRASH-FILES.md
+.agent/nl-cost-agent-secret.yml
+service/.venv/
+__pycache__/
+.baml/
+.codex/
+.vscode/
+.agent/
