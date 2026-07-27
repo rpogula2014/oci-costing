@@ -45,6 +45,9 @@ flowchart LR
 - **For OCI Object Storage access** — auth depends on where you run:
   - **Production (OKE):** set `OCI_AUTH=workload_identity`. A root-tenancy IAM policy endorses the pod's cluster+namespace+ServiceAccount tuple. No `~/.oci/config` needed. See `docs/deployment.md`.
   - **Local dev:** `~/.oci/config` with a profile that has READ on the reporting bucket. The loader auto-detects this when `OCI_AUTH` is unset.
+- **For Cloud Advisor (`oci-pull-advisor`)** — the same principal additionally needs `optimizer` read. Under OKE Workload Identity add an `allow` (not a dynamic group) to the same root-tenancy policy, with the identical workload conditions:
+  `allow any-user to read optimizer-api-family in tenancy where all { request.principal.type='workload', request.principal.cluster_id='<cluster-ocid>', request.principal.namespace='oci-finops', request.principal.service_account='oci-costing-load' }`
+  Missing this shows as `404 NotAuthorizedOrNotFound` on `ListEnrollmentStatuses` (OCI reports authz as 404). Full statement + `oci iam policy update` gotchas in `docs/deployment.md`.
 
 ## Setup
 
@@ -103,6 +106,15 @@ oci-pull-bills 2026-04    # entire month
 
 Steps: downloads FOCUS + cost CSVs for the requested interval(s) into `$OCI_DATA_DIR/{focus,cost}/`, then runs `oci-load-bills focus` and `oci-load-bills oci` over those dirs. Loaders are idempotent — files dedupe by `source_filename`.
 
+### Cloud Advisor snapshot (`oci-pull-advisor`)
+
+```bash
+oci-pull-advisor            # snapshot dated today (UTC)
+oci-pull-advisor 2026-07-17 # snapshot for a specific day
+```
+
+Calls four OCI Cloud Advisor (optimizer) APIs — `ListCategories`, `ListRecommendations`, `ListResourceActions`, `ListHistories` — for the tenancy root (subtree enabled, all pages), enriches each resource action with its recommendation/category context, and writes a dated snapshot to ClickHouse `advisor_recommendations` + `advisor_history` (see `oci-dbs/clickhouse/04_advisor.sql`). Guarded by `ListEnrollmentStatuses`: if the tenancy's Advisor enrollment is not ACTIVE it logs and exits without writing. Idempotent — a same-day re-run deletes that day's rows first. `resource_id` joins to `oci_cost_report.product_resourceid` (Compute/volumes/LB; Object Storage buckets have no cost match). Runs daily via the `oci-advisor-load` CronJob. Needs the `optimizer` read IAM grant (see Prerequisites).
+
 ## Loader details
 
 ### FOCUS
@@ -145,8 +157,8 @@ Dockerfile lives in `src/`, k8s manifests at repo root. See `docs/deployment.md`
 src/Dockerfile                # multi-stage, scratch runtime, 2 static binaries (~18 MB)
 scripts/deploy.sh             # build + push + apply (subcommands: build|apply|trigger|status|all)
 scripts/make-secret.sh        # generate app secret (ClickHouse DSN)
-k8s-oci-costing.yml           # Namespace + ServiceAccount + hourly CronJob
-oci-costing-configmap.yml     # tags allow-list ConfigMap
+k8s-oci-finops-extract.yml           # ServiceAccount + hourly/daily CronJobs (ns must pre-exist)
+oci-finops-extract-configmap.yml     # tags allow-list ConfigMap
 oci-costing-secret.example.yml
 ```
 
@@ -168,8 +180,8 @@ oci-costing-secret.example.yml
 │   ├── tags.yaml           # extra tags/* keys to merge into JSONB (build input; k8s uses ConfigMap)
 │   └── Dockerfile
 ├── scripts/                # deploy.sh, make-secret.sh, daily_load.sh
-├── k8s-oci-costing.yml     # k8s manifests (repo root)
-├── oci-costing-configmap.yml
+├── k8s-oci-finops-extract.yml     # k8s manifests (repo root)
+├── oci-finops-extract-configmap.yml
 ├── oci-dbs/clickhouse/     # CH DDL + PG→CH backfill script
 ├── scripts/daily_load.sh   # legacy bash wrapper (kept for local dev; container uses oci-pull-bills)
 ├── baml_src/               # BAML source: NL→SQL agent (types, prompts, SQL guard + tests)

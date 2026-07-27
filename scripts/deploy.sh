@@ -34,8 +34,8 @@ CRONJOB_NAME="oci-costing-load"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-MANIFEST="$ROOT_DIR/k8s-oci-costing.yml"
-CONFIGMAP="$ROOT_DIR/oci-costing-configmap.yml"
+MANIFEST="$ROOT_DIR/k8s-oci-finops-extract.yml"
+CONFIGMAP="$ROOT_DIR/oci-finops-extract-configmap.yml"
 cd "$SCRIPT_DIR"
 
 log() { printf '\033[1;34m[deploy]\033[0m %s\n' "$*"; }
@@ -60,24 +60,28 @@ build_and_push() {
   log "pushed $IMAGE"
 }
 
-patch_image_in_manifest() {
-  # Portable: write to a temp file then mv. Avoids GNU vs BSD `sed -i` split.
-  local img_escaped tmp
+RENDERED=""
+
+render_manifest() {
+  # The committed manifest carries the literal `image_to_be_deployed` token that the GoCD
+  # deploy script seds. Render to a temp copy so the token survives in git.
+  local img_escaped
   img_escaped=$(printf '%s' "$IMAGE" | sed 's#[\#&]#\\&#g')
-  tmp=$(mktemp "${TMPDIR:-/tmp}/cronjob.XXXXXX")
-  trap 'rm -f "$tmp"' EXIT
-  sed -E "s#(^[[:space:]]*image:[[:space:]]*).*#\1${img_escaped}#" "$MANIFEST" > "$tmp"
-  mv "$tmp" "$MANIFEST"
-  trap - EXIT
-  log "patched image in $MANIFEST → $IMAGE"
+  RENDERED=$(mktemp "${TMPDIR:-/tmp}/cronjob.XXXXXX")
+  trap 'rm -f "$RENDERED"' EXIT
+  sed -E "s#(^[[:space:]]*image:[[:space:]]*).*#\1${img_escaped}#" "$MANIFEST" > "$RENDERED"
+  log "rendered image → $IMAGE"
 }
 
 apply_manifest() {
   [[ -f "$MANIFEST" ]] || die "$MANIFEST not found"
-  patch_image_in_manifest
+  # The Namespace object no longer ships in the manifest (GoCD's deploy principal can't create
+  # namespaces), and the workload-identity IAM policy is bound to ns/$NS — fail loud if missing.
+  kubectl $(kctx_arg) get ns "$NS" >/dev/null 2>&1 || die "namespace $NS missing — create it first (see docs/deployment.md IAM section)"
+  render_manifest
   log "apply $CONFIGMAP + $MANIFEST → ns/$NS"
   kubectl $(kctx_arg) apply -f "$CONFIGMAP"
-  kubectl $(kctx_arg) apply -f "$MANIFEST"
+  kubectl $(kctx_arg) apply -f "$RENDERED"
   log "current cronjob"
   kc get cronjob "$CRONJOB_NAME" -o wide || true
 }

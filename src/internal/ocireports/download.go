@@ -174,6 +174,21 @@ func resolveConfigProvider(opts Options) (common.ConfigurationProvider, string, 
 	return nil, "", fmt.Errorf("no usable OCI auth method (tried workload_identity, resource_principal, instance_principal, api_key)")
 }
 
+// ConfigProvider resolves an OCI configuration provider using the same
+// $OCI_AUTH chain as Download (Workload Identity → RP → IP → api-key). Exposed
+// so other OCI clients (e.g. the optimizer/Cloud Advisor ingest) authenticate
+// identically. Only opts.Profile / opts.ConfigFilePath (api-key fallback) and
+// opts.Logf are consulted. Returns the provider and the resolved auth-mode name.
+func ConfigProvider(opts Options) (common.ConfigurationProvider, string, error) {
+	if opts.Profile == "" {
+		opts.Profile = "DEFAULT"
+	}
+	if opts.ConfigFilePath == "" {
+		opts.ConfigFilePath = filepath.Join(homeFolder(), ".oci", "config")
+	}
+	return resolveConfigProvider(opts)
+}
+
 // Download lists and downloads report objects matching opts. Returns count of
 // files downloaded.
 func Download(ctx context.Context, opts Options) (int, error) {

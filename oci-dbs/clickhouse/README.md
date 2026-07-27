@@ -8,12 +8,14 @@ ClickHouse DDL for the dual-write migration (see `docs/clickhouse-migration-plan
 | `02_oci_cost_report.sql` | `oci_cost_report` table + `oci_cost_report_effective` view |
 | `backfill_pg_to_ch.sh` | One-time PG → CH backfill of existing data (streaming, resumable) |
 | `03_attributed_view.sql` | `oci_cost_report_attributed` — retro-applies each OCID's latest tags (tag-backfill fix); original tags kept in `tags_asbilled` |
+| `04_advisor.sql` | `advisor_recommendations` + `advisor_history` — daily Cloud Advisor (optimizer) snapshot; `resource_id` joins to `oci_cost_report.product_resourceid` |
 
 Apply:
 
 ```bash
 clickhouse-client --host <host> --secure -d oci-finops --queries-file 01_focus_data.sql
 clickhouse-client --host <host> --secure -d oci-finops --queries-file 02_oci_cost_report.sql
+clickhouse-client --host <host> --secure -d oci-finops --queries-file 04_advisor.sql
 ```
 
 ## Design notes (differences vs PostgreSQL)

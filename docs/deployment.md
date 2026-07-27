@@ -18,8 +18,8 @@ src/                          # Go module root
 scripts/
 ├── deploy.sh                 # build + push + apply
 └── make-secret.sh            # generate the app Secret (ClickHouse DSN)
-k8s-oci-costing.yml           # Namespace + ServiceAccount + CronJob (repo root)
-oci-costing-configmap.yml     # tags allow-list ConfigMap (repo root)
+k8s-oci-finops-extract.yml           # ServiceAccount + 2 CronJobs (repo root; ns must pre-exist)
+oci-finops-extract-configmap.yml     # tags allow-list ConfigMap (repo root)
 oci-costing-secret.example.yml
 ```
 
@@ -33,7 +33,7 @@ oci-costing-secret.example.yml
 | Image | `iad.ocir.io/ido20ydwejhf/app-dev-datasvcs/oci-costing:latest` |
 | Schedule | hourly at `:00` UTC, `concurrencyPolicy: Forbid` |
 | Sink | ClickHouse only (`WRITE_CH=true`, `WRITE_PG=false`) |
-| IAM policy | `oci-costing-workload-usage-report` (root tenancy) |
+| IAM policy | `oci-costing-usage-report-policy` + `oci-costing-advisor-policy` (root tenancy, IaC in `atd-security-oci`) |
 
 ## Step-by-step: what was done (2026-07-10/11)
 
@@ -57,7 +57,52 @@ credential. **Renaming the namespace or ServiceAccount breaks auth silently**;
 policy and manifest must change together.
 
 Created as policy `oci-costing-workload-usage-report`
-(`ocid1.policy.oc1..aaaaaaaaam5ttxp7wwrghaz6f3phjysq676ml6tlyq6snranrousba2ntxya`).
+(`ocid1.policy.oc1..aaaaaaaaam5ttxp7wwrghaz6f3phjysq676ml6tlyq6snranrousba2ntxya`)
+— **superseded 2026-07-26, see the IaC block below**; the rest of this section
+records how the grants were originally applied by hand.
+
+**Cloud Advisor grant (`oci-advisor-load` CronJob).** Advisor runs in **our**
+tenancy (not Oracle's `usage-report`), so it needs a regular `allow` — not
+another `endorse` — added as a third statement to the *same* policy, with the
+identical workload-identity conditions:
+
+```
+allow any-user to read optimizer-api-family in tenancy where all {
+  request.principal.type = 'workload',
+  request.principal.cluster_id = '<cluster-ocid>',
+  request.principal.namespace = 'oci-finops',
+  request.principal.service_account = 'oci-costing-load' }
+```
+
+Applied 2026-07-17. Without it the pod authenticates fine but the first Advisor
+call fails **`404 NotAuthorizedOrNotFound` on `ListEnrollmentStatuses`** — OCI
+reports missing authorization as 404, not 403, so a 404 here means "grant is
+missing", not "resource absent". `read optimizer-api-family` covers all four
+list calls (categories/recommendations/resource-actions/histories).
+
+**Both grants are now IaC-managed** in
+[`ATD-DevSecOps/atd-security-oci`](https://github.com/ATD-DevSecOps/atd-security-oci)
+(tenancy-scoped, applied by that repo's `main/iam` stack), split one file per
+grant instead of the single manual policy that held all three statements:
+
+| File | OCI policy | Grants |
+|---|---|---|
+| `policies/oci-costing-usage-report.json` | `oci-costing-usage-report-policy` | `define` alias + cross-tenancy `endorse` on Oracle's `bling` buckets |
+| `policies/oci-costing-advisor.json` | `oci-costing-advisor-policy` | `allow read optimizer-api-family` in our tenancy |
+
+The `allow` needs no `define` — it targets our own tenancy, not the alias. Edit
+statements there via PR; do **not** run `oci iam policy update` anymore, that
+repo's `drift.yaml` job flags manual edits at 08:55 ET.
+
+Policy names get a `-policy` suffix because that repo's module derives the name
+from the filename stem. OCI policy names are immutable (`name` is ForceNew in
+the provider, and `UpdatePolicy` takes no name), so the manually-created
+`oci-costing-workload-usage-report` could not be imported without a
+destroy/recreate. Cutover is additive instead: CI creates the two new policies
+(IAM grants are additive, so no gap while all three coexist), then the original
+`ocid1.policy.oc1..aaaaaaaaam5ttxp7wwrghaz6f3phjysq676ml6tlyq6snranrousba2ntxya`
+is deleted and the *next* hourly run confirms the IaC policies carry the load.
+Restore path if that run fails: the statements are in the two repo JSONs.
 
 ### 2. Image build + push
 
@@ -106,7 +151,7 @@ kubectl -n oci-finops logs -f job/smoke-1
 
 The CronJob sets `OCI_AUTH=workload_identity` — fails fast, no silent fallback
 to node identity or API keys. The Go SDK additionally requires two env vars in
-the pod spec (already in k8s-oci-costing.yml):
+the pod spec (already in k8s-oci-finops-extract.yml):
 
 ```yaml
 - name: OCI_RESOURCE_PRINCIPAL_VERSION
@@ -135,15 +180,20 @@ Active mode is logged at startup: `auth: oke-workload-identity`.
 ```bash
 ./scripts/deploy.sh                    # build + push + apply
 ./scripts/deploy.sh build              # build + push only
-./scripts/deploy.sh apply              # apply manifest only (patches image: line)
+./scripts/deploy.sh apply              # apply manifest only (renders image: into a temp copy)
 ./scripts/deploy.sh trigger            # create a one-off Job, follow logs
 ./scripts/deploy.sh status             # cronjob + recent jobs + last pod logs
 IMAGE_TAG=v0.1.2 ./scripts/deploy.sh   # immutable tag (default: latest)
 KCTX=context-xxx ./scripts/deploy.sh   # override kube context
 ```
 
-`deploy.sh apply` rewrites the `image:` line in `k8s-oci-costing.yml` in place
-before applying — don't `kubectl apply -f k8s-oci-costing.yml` by hand.
+`deploy.sh apply` renders the `image:` line into a **temp copy** and applies that — the
+committed manifest keeps the literal `image_to_be_deployed` token the GoCD pipeline needs.
+So never `kubectl apply -f k8s-oci-finops-extract.yml` by hand: it would try to pull an image
+named `image_to_be_deployed`. `apply` also requires namespace `oci-finops` to already exist —
+the manifest no longer ships a `Namespace` object (GoCD's deploy principal cannot create one),
+and the Workload Identity IAM policy is bound to that namespace + `oci-costing-load` SA.
+See `docs/gocd-onboarding.md` for the GoCD pipeline layout.
 
 ## Secret keys
 

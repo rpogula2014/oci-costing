@@ -36,3 +36,6 @@ __pycache__/
 .codex/
 .vscode/
 .agent/
+.agents/
+src/oci-pull-advisor
+dashboard/

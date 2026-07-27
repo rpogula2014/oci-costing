@@ -1,0 +1,20 @@
+# Applied unconditionally into the `monitoring` namespace by gocd_deploy.sh:468.
+# The CronJobs expose no metrics endpoint, so this selects nothing today — it exists to
+# keep the deploy step from erroring, and is the hook if we add a metrics Service later.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: oci-finops-extract
+  namespace: monitoring
+  labels:
+    k8s-app: oci-finops-extract
+spec:
+  namespaceSelector:
+    matchNames:
+      - PltNamespace
+  selector:
+    matchLabels:
+      app: oci-finops-extract
+  endpoints:
+    - port: metrics
+      interval: 60s

@@ -1,9 +1,4 @@
 apiVersion: v1
-kind: Namespace
-metadata:
-  name: oci-finops
----
-apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: oci-costing-load
@@ -47,11 +42,11 @@ spec:
               type: RuntimeDefault
           containers:
             - name: loader
-              # NOTE: this placeholder is rewritten by scripts/deploy.sh before
-              # `kubectl apply`. Do NOT run `kubectl apply -f k8s-oci-costing.yml`
-              # directly without first running `./scripts/deploy.sh apply` or
-              # patching this line.
-              image: iad.ocir.io/ido20ydwejhf/app-dev-datasvcs/oci-costing:latest
+              # NOTE: `image_to_be_deployed` is a required literal token. The GoCD deploy
+              # script seds it (gocd_deploy.sh:340,363); scripts/deploy.sh renders it into a
+              # temp copy. A hand-run `kubectl apply -f` on this file deploys an image
+              # literally named image_to_be_deployed → ImagePullBackOff. Use ./scripts/deploy.sh.
+              image: image_to_be_deployed
               imagePullPolicy: Always # :latest tag — node cache must not win
               env:
                 - name: CLICKHOUSE_URL
@@ -104,3 +99,74 @@ spec:
             - name: tags
               configMap:
                 name: oci-costing-tags
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: oci-advisor-load
+  namespace: oci-finops
+spec:
+  # Daily. Cloud Advisor recomputes ~daily, so hourly buys nothing; one snapshot
+  # per day drives the savings opportunity/realized trends.
+  schedule: "30 6 * * *"
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900 # 15 min hard cap (small API pull)
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: Never
+          # Same identity as oci-costing-load; needs an `optimizer` read IAM grant
+          # in addition to the usage-report policy (see README IAM section).
+          serviceAccountName: oci-costing-load # OKE Workload Identity → OCI Resource Principal
+          imagePullSecrets:
+            - name: ocir-pull
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: advisor
+              # Placeholder rewritten by scripts/deploy.sh before `kubectl apply`.
+              image: image_to_be_deployed
+              imagePullPolicy: Always
+              command: ["/oci-pull-advisor"]
+              env:
+                - name: CLICKHOUSE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: oci-costing-secret
+                      key: clickhouse_url
+                - name: OCI_AUTH
+                  value: workload_identity # fail hard, no node-identity fallback
+                - name: OCI_RESOURCE_PRINCIPAL_VERSION
+                  value: "2.2"
+                - name: OCI_RESOURCE_PRINCIPAL_REGION
+                  value: us-ashburn-1
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                requests:
+                  cpu: "32m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "64m"
+                  memory: "256Mi"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 128Mi
